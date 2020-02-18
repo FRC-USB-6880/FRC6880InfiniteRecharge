@@ -38,12 +38,23 @@ import edu.wpi.first.wpilibj.trajectory.TrajectoryConfig;
 import edu.wpi.first.wpilibj.trajectory.TrajectoryGenerator;
 import edu.wpi.first.wpilibj.trajectory.TrajectoryUtil;
 import edu.wpi.first.wpilibj.trajectory.constraint.DifferentialDriveVoltageConstraint;
+import edu.wpi.first.wpilibj.kinematics.ChassisSpeeds;
+import edu.wpi.first.wpilibj.kinematics.DifferentialDriveKinematics;
+
+
 
 public class Auto_pos3_path1 extends CommandBase {
   private DriveTrain m_drvTrain;
   private Intake m_intake;
   private Indexer m_indexer;
   private Launcher m_launcher;
+  private Pose2d pose;
+  private RamseteController ramseteController;
+  private Path trajectoryPath;
+  private Trajectory exampleTrajectory;
+  private DifferentialDriveKinematics kDriveKinematics;
+  
+  
 
   /**
    * Creates a new Auto_pos3_path1.
@@ -62,6 +73,7 @@ public class Auto_pos3_path1 extends CommandBase {
   }
 
   public Command getAutoCommand() {
+
     // An ExampleCommand will run in autonomous
     // Create a voltage constraint to ensure we don't accelerate too fast
     var autoVoltageConstraint =
@@ -80,34 +92,27 @@ public class Auto_pos3_path1 extends CommandBase {
             .setKinematics(DriveConstants.kDriveKinematics)
             // Apply the voltage constraint
             .addConstraint(autoVoltageConstraint);
-
+  
     // An example trajectory to follow.  All units in meters.
     RamseteCommand ramseteCommands[] = new RamseteCommand[AutoPathsConstants.kPos3Path1.length];
     for (int i=0; i<ramseteCommands.length; i++) {
       String trajectoryJSON = AutoPathsConstants.kPos3Path1[i];
-      // String trajectoryJSON = "paths/Auto_pos3_path1.json";
-      Path trajectoryPath;
-      Trajectory exampleTrajectory;
+      
       try {
         trajectoryPath = Filesystem.getDeployDirectory().toPath().resolve(trajectoryJSON);
         exampleTrajectory = TrajectoryUtil.fromPathweaverJson(trajectoryPath);
       } catch (IOException ex) {
         DriverStation.reportError("Unable to open trajectory: " + trajectoryJSON, ex.getStackTrace());
-        // An example trajectory to follow.  All units in meters.
-        exampleTrajectory = TrajectoryGenerator.generateTrajectory(
-          // Start at the origin facing the +X direction
-          new Pose2d(0, 0, new Rotation2d(0)),
-          // Pass through these two interior waypoints, making an 's' curve path
-          List.of(
-              new Translation2d(1, 1),
-              new Translation2d(2, -1)
-          ),
-          // End 3 meters straight ahead of where we started, facing forward
-          new Pose2d(3, 0, new Rotation2d(0)),
-          // Pass config
-          config
-        );
       }
+
+      RamseteController controller = new RamseteController() {
+        Trajectory.State goal = exampleTrajectory.sample(3.4);
+        ChassisSpeeds adjustedSpeeds = ramseteController.calculate(pose, goal);
+        DifferentialDriveWheelSpeeds wheelSpeeds = kDriveKinematics.toWheelSpeeds(adjustedSpeeds);
+        double left = wheelSpeeds.leftMetersPerSecond;
+        double right = wheelSpeeds.rightMetersPerSecond;
+    
+      };
 
       ramseteCommands[i] = new RamseteCommand(
           exampleTrajectory,
@@ -125,6 +130,7 @@ public class Auto_pos3_path1 extends CommandBase {
           m_drvTrain
       );
 
+      
     }
 
     // Run path following command, then stop at the end.
